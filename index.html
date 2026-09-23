@@ -472,9 +472,11 @@ function n(v){ if(v===null||v===undefined||v==='') return '<span style="color:va
 function m(v){ if(v===null||v===undefined||v==='') return '—'; var x=parseFloat(String(v).replace(/,/g,'')); return isNaN(x)?(v||'—'):x.toLocaleString('es-CR'); }
 
 // ── Boot ──
+var DEFAULT_API = 'https://script.google.com/macros/s/AKfycbzwbIwk7rW8KOvRYqrRMW4l44kW5V5R-aw8Vz4814ZMvqmjrLQlxvnPrUuNAEUOxIdQlA/exec';
 (function(){
-  var s = localStorage.getItem('pt_api');
-  if (s) { API=s; iniciar(); }
+  var s = localStorage.getItem('pt_api') || DEFAULT_API;
+  API = s;
+  iniciar();
 })();
 </script>
 </body>
