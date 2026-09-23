@@ -235,6 +235,7 @@ var LOADING = false;
 var HEADERS_CACHE = null;
 var FILA_FN = null;
 var observer = null;
+var BUF = {};   // buffer cliente: BUF[mod] = { headers, rows, total, complete }
 
 // ── Config ──
 function guardarCfg() {
@@ -385,6 +386,7 @@ function cargar(mod) {
   TOT = 0;
   HEADERS_CACHE = null;
   LOADING = false;
+  BUF[mod] = null; // resetear buffer al cambiar módulo
   var cfg = MODS[mod];
   document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
   var btn = document.querySelector('[data-m="'+mod+'"]');
@@ -417,6 +419,7 @@ function cargarMas() {
       document.getElementById('s-total').textContent = TOT.toLocaleString('es-CR');
       document.getElementById('s-show').textContent = Math.min(OFF, TOT).toLocaleString('es-CR');
       initObserver();
+      if (OFF <= PG) iniciarBuffer(MOD); // arrancar buffer de fondo al primer lote
     })
     .catch(function(err) {
       LOADING = false;
@@ -443,10 +446,54 @@ function appendFilas(data) {
   }
 }
 
+// ── Buffer de fondo para búsqueda local ──
+function iniciarBuffer(mod) {
+  if (BUF[mod]) return;
+  BUF[mod] = { headers: [], rows: [], total: 0, complete: false };
+  cargarBuffer(mod, 0);
+}
+function cargarBuffer(mod, offset) {
+  var cfg = MODS[mod];
+  apiFetch(cfg.accion, { limit: 500, offset: offset, q: '' })
+    .then(function(data) {
+      var b = BUF[mod];
+      if (!b || b.mod_reset) return;
+      if (offset === 0) { b.headers = data.headers; b.total = data.total; }
+      b.rows = b.rows.concat(data.rows);
+      if (b.rows.length < data.total) {
+        cargarBuffer(mod, offset + 500);
+      } else {
+        b.complete = true;
+      }
+    })
+    .catch(function() {});
+}
+
 // ── Búsqueda ──
 function buscar(v) {
   clearTimeout(TIMER);
-  TIMER = setTimeout(function(){ Q=v.trim(); if(MOD) cargar(MOD); }, 450);
+  TIMER = setTimeout(function() {
+    Q = v.trim();
+    if (!Q) { cargar(MOD); return; }
+    var b = BUF[MOD];
+    if (b && b.rows.length > 0) {
+      // Búsqueda instantánea en buffer local
+      var lq = Q.toLowerCase();
+      var found = b.rows.filter(function(r) {
+        return r.some(function(c) { return String(c).toLowerCase().indexOf(lq) !== -1; });
+      });
+      TOT = found.length; OFF = found.length;
+      document.getElementById('tbl').innerHTML = '';
+      document.getElementById('load-more').style.display = 'none';
+      if (observer) observer.disconnect();
+      var nota = b.complete ? '' : ' <span style="color:var(--text-muted);font-size:.72rem">(parcial, cargando…)</span>';
+      document.getElementById('s-total').textContent = found.length.toLocaleString('es-CR');
+      document.getElementById('s-show').textContent = found.length.toLocaleString('es-CR') + (b.complete ? '' : '+');
+      appendFilas({ headers: b.headers, rows: found, total: found.length, offset: 0, limit: found.length });
+    } else {
+      cargar(MOD); // fallback a API si no hay buffer
+    }
+  }, 300);
 }
 
 // ── Formulario ──
