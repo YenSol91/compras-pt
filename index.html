@@ -312,9 +312,11 @@ var MODS = {
       ]
     },
     fila: function(r) {
+      var pdf = r[8] ? '<a href="'+e(r[8])+'" target="_blank" style="color:var(--accent);text-decoration:none;font-size:.75rem">📄 Ver</a>' : '—';
       return '<tr><td class="muted" style="white-space:nowrap">'+e(r[0])+'</td><td class="code">'+e(r[1])+'</td>'
            + '<td>'+e(r[2])+'</td><td class="num">'+n(r[3])+'</td><td>'+e(r[4])+'</td>'
            + '<td>'+e(r[5])+'</td><td class="muted">'+e(r[6])+'</td><td class="muted">'+e(r[7])+'</td>'
+           + '<td style="text-align:center">'+pdf+'</td><td class="muted">'+e(r[9])+'</td>'
            + '<td class="num">₡'+m(r[10])+'</td><td class="num" style="font-weight:600">₡'+m(r[11])+'</td>'
            + '<td>'+e(r[12])+'</td></tr>';
     }
