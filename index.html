@@ -260,7 +260,7 @@ function apiFetch(action, params) {
     url.searchParams.set('action', action);
     url.searchParams.set('callback', cb);
     if (params) Object.keys(params).forEach(function(k){ url.searchParams.set(k, String(params[k])); });
-    var t = setTimeout(function(){ cleanup(); reject(new Error('Timeout — revisa la URL del Web App')); }, 20000);
+    var t = setTimeout(function(){ cleanup(); reject(new Error('Timeout — el servidor tardó demasiado, intenta de nuevo')); }, 45000);
     var s = document.createElement('script');
     function cleanup(){ clearTimeout(t); delete window[cb]; if(s.parentNode) s.parentNode.removeChild(s); }
     window[cb] = function(j){ cleanup(); if(!j.ok){ reject(new Error(j.error||'Error API')); } else { resolve(j.data); } };
