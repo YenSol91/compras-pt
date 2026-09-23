@@ -91,7 +91,7 @@ aside{width:210px;flex-shrink:0;background:var(--sidebar);display:flex;flex-dire
 .stat{font-size:.72rem;color:var(--text-muted)}
 .stat b{color:var(--text);font-weight:600}
 
-.tbl-wrap{flex:1;overflow:auto}
+.tbl-wrap{flex:1;overflow:auto;display:flex;flex-direction:column}
 table{width:100%;border-collapse:collapse;font-size:.78rem}
 thead{position:sticky;top:0;z-index:2}
 th{background:var(--header);padding:8px 13px;text-align:left;font-size:.66rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);white-space:nowrap}
@@ -197,13 +197,12 @@ tr:hover td{background:var(--row-hover)}
       <div class="stat">Total: <b id="s-total">—</b></div>
       <div class="stat">Mostrando: <b id="s-show">—</b></div>
     </div>
-    <div class="tbl-wrap" id="tbl">
-      <div class="state-msg"><span>Selecciona un módulo del menú</span></div>
-    </div>
-    <div class="pag" id="pag" style="display:none">
-      <button onclick="pagAnterior()" id="btn-ant">← Anterior</button>
-      <span class="pag-info" id="pag-info"></span>
-      <button onclick="pagSiguiente()" id="btn-sig">Siguiente →</button>
+    <div class="tbl-wrap" id="tbl-wrap">
+      <div id="tbl"><div class="state-msg"><span>Selecciona un módulo del menú</span></div></div>
+      <div id="sentinel" style="height:1px"></div>
+      <div id="load-more" style="display:none;text-align:center;padding:14px;color:var(--text-muted);font-size:.78rem">
+        <div class="spin" style="display:inline-block;margin-right:6px"></div>Cargando más…
+      </div>
     </div>
   </div>
 </div>
@@ -232,6 +231,10 @@ var TOT = 0;
 var Q   = '';
 var TIMER = null;
 var PG  = 100;
+var LOADING = false;
+var HEADERS_CACHE = null;
+var FILA_FN = null;
+var observer = null;
 
 // ── Config ──
 function guardarCfg() {
@@ -378,10 +381,24 @@ var MODS = {
   }
 };
 
-// ── Cargar módulo ──
-function cargar(mod, off) {
+// ── Scroll infinito ──
+function initObserver() {
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting && !LOADING && OFF < TOT) {
+      cargarMas();
+    }
+  }, { threshold: 0.1 });
+  observer.observe(document.getElementById('sentinel'));
+}
+
+// ── Cargar módulo (reset) ──
+function cargar(mod) {
   MOD = mod;
-  OFF = off || 0;
+  OFF = 0;
+  TOT = 0;
+  HEADERS_CACHE = null;
+  LOADING = false;
   var cfg = MODS[mod];
   document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
   var btn = document.querySelector('[data-m="'+mod+'"]');
@@ -392,42 +409,59 @@ function cargar(mod, off) {
   if (cfg.nuevo) { bn.style.display=''; bn.textContent=cfg.btnLabel||'+ Nuevo'; }
   else { bn.style.display='none'; }
   document.getElementById('tbl').innerHTML = '<div class="state-msg"><div class="spin"></div><span>Cargando...</span></div>';
-  document.getElementById('pag').style.display = 'none';
+  document.getElementById('load-more').style.display = 'none';
   document.getElementById('s-total').textContent = '…';
   document.getElementById('s-show').textContent = '…';
-
-  apiFetch(cfg.accion, { limit: PG, offset: OFF, q: Q })
-    .then(function(data){ TOT = data.total; renderTabla(data, cfg.fila); })
-    .catch(function(err){ document.getElementById('tbl').innerHTML = '<div class="state-msg">⚠️ '+e(err.message)+'</div>'; });
+  FILA_FN = cfg.fila;
+  cargarMas();
 }
 
-function renderTabla(data, filaFn) {
-  if (!data.rows.length) {
-    document.getElementById('tbl').innerHTML = '<div class="state-msg">Sin resultados</div>';
-    document.getElementById('s-total').textContent = data.total.toLocaleString('es-CR');
-    document.getElementById('s-show').textContent = '0';
-    return;
+function cargarMas() {
+  if (LOADING || (TOT > 0 && OFF >= TOT)) return;
+  LOADING = true;
+  if (OFF > 0) document.getElementById('load-more').style.display = '';
+  var cfg = MODS[MOD];
+  apiFetch(cfg.accion, { limit: PG, offset: OFF, q: Q })
+    .then(function(data) {
+      TOT = data.total;
+      LOADING = false;
+      document.getElementById('load-more').style.display = 'none';
+      appendFilas(data);
+      OFF += data.rows.length;
+      document.getElementById('s-total').textContent = TOT.toLocaleString('es-CR');
+      document.getElementById('s-show').textContent = Math.min(OFF, TOT).toLocaleString('es-CR');
+      initObserver();
+    })
+    .catch(function(err) {
+      LOADING = false;
+      document.getElementById('load-more').style.display = 'none';
+      if (OFF === 0) {
+        document.getElementById('tbl').innerHTML = '<div class="state-msg">⚠️ '+e(err.message)+'</div>';
+      }
+    });
+}
+
+function appendFilas(data) {
+  var tblEl = document.getElementById('tbl');
+  if (OFF === 0) {
+    if (!data.rows.length) {
+      tblEl.innerHTML = '<div class="state-msg">Sin resultados</div>';
+      return;
+    }
+    HEADERS_CACHE = data.headers;
+    var thead = '<thead><tr>'+data.headers.map(function(h){ return '<th>'+e(h)+'</th>'; }).join('')+'</tr></thead>';
+    tblEl.innerHTML = '<table id="data-table">'+thead+'<tbody id="data-body">'+data.rows.map(FILA_FN).join('')+'</tbody></table>';
+  } else {
+    var tbody = document.getElementById('data-body');
+    if (tbody) tbody.insertAdjacentHTML('beforeend', data.rows.map(FILA_FN).join(''));
   }
-  var thead = '<thead><tr>'+data.headers.map(function(h){ return '<th>'+e(h)+'</th>'; }).join('')+'</tr></thead>';
-  var tbody = '<tbody>'+data.rows.map(filaFn).join('')+'</tbody>';
-  document.getElementById('tbl').innerHTML = '<table>'+thead+tbody+'</table>';
-  var from = OFF+1, to = Math.min(OFF+PG, OFF+data.rows.length);
-  document.getElementById('s-total').textContent = data.total.toLocaleString('es-CR');
-  document.getElementById('s-show').textContent = from+'–'+to;
-  var pag = document.getElementById('pag');
-  pag.style.display = data.total > PG ? '' : 'none';
-  document.getElementById('btn-ant').disabled = OFF === 0;
-  document.getElementById('btn-sig').disabled = (OFF + PG) >= data.total;
-  document.getElementById('pag-info').textContent = 'Página '+(Math.floor(OFF/PG)+1)+' de '+Math.ceil(data.total/PG);
 }
 
 // ── Búsqueda ──
 function buscar(v) {
   clearTimeout(TIMER);
-  TIMER = setTimeout(function(){ Q=v.trim(); OFF=0; if(MOD) cargar(MOD,0); }, 450);
+  TIMER = setTimeout(function(){ Q=v.trim(); if(MOD) cargar(MOD); }, 450);
 }
-function pagAnterior(){ if(OFF>0) cargar(MOD, Math.max(0,OFF-PG)); }
-function pagSiguiente(){ if(OFF+PG<TOT) cargar(MOD, OFF+PG); }
 
 // ── Formulario ──
 var formActual = null;
