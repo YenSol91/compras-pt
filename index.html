@@ -255,38 +255,22 @@ function iniciar() {
   cargar('stock');
 }
 
-// ── API via JSONP (evita CORS/redirect issues de Apps Script) ──
+// ── API via fetch ──
 function apiFetch(action, params) {
-  return new Promise(function(resolve, reject) {
-    var cb = 'ptcb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    var url = new URL(API);
-    url.searchParams.set('action', action);
-    url.searchParams.set('callback', cb);
-    if (params) Object.keys(params).forEach(function(k){ url.searchParams.set(k, String(params[k])); });
-    var t = setTimeout(function(){ cleanup(); reject(new Error('Timeout — el servidor tardó demasiado, intenta de nuevo')); }, 45000);
-    var s = document.createElement('script');
-    function cleanup(){ clearTimeout(t); delete window[cb]; if(s.parentNode) s.parentNode.removeChild(s); }
-    window[cb] = function(j){ cleanup(); if(!j.ok){ reject(new Error(j.error||'Error API')); } else { resolve(j.data); } };
-    s.onerror = function(){ cleanup(); reject(new Error('No se pudo conectar al Web App')); };
-    s.src = url.toString();
-    document.head.appendChild(s);
-  });
+  var url = new URL(API);
+  url.searchParams.set('action', action);
+  if (params) Object.keys(params).forEach(function(k){ url.searchParams.set(k, String(params[k])); });
+  return fetch(url.toString())
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){ if (!j.ok) throw new Error(j.error || 'Error API'); return j.data; });
 }
 function apiPost(action, body) {
-  return new Promise(function(resolve, reject) {
-    var cb = 'ptcb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    var url = new URL(API);
-    url.searchParams.set('action', action);
-    url.searchParams.set('callback', cb);
-    if (body && body.row) url.searchParams.set('row', JSON.stringify(body.row));
-    var t = setTimeout(function(){ cleanup(); reject(new Error('Timeout')); }, 20000);
-    var s = document.createElement('script');
-    function cleanup(){ clearTimeout(t); delete window[cb]; if(s.parentNode) s.parentNode.removeChild(s); }
-    window[cb] = function(j){ cleanup(); if(!j.ok){ reject(new Error(j.error||'Error API')); } else { resolve(j.data); } };
-    s.onerror = function(){ cleanup(); reject(new Error('Error de red')); };
-    s.src = url.toString();
-    document.head.appendChild(s);
-  });
+  var url = new URL(API);
+  url.searchParams.set('action', action);
+  if (body && body.row) url.searchParams.set('row', JSON.stringify(body.row));
+  return fetch(url.toString())
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){ if (!j.ok) throw new Error(j.error || 'Error API'); return j.data; });
 }
 
 // ── Módulos ──
